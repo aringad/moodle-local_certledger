@@ -28,8 +28,8 @@ $plugin->component = 'local_certledger';
 $plugin->version   = 2026111200;
 $plugin->requires  = 2025041400; // Moodle 5.0.
 $plugin->supported = [500, 503];
-$plugin->maturity  = MATURITY_BETA;
-$plugin->release   = '0.9.0';
+$plugin->maturity  = MATURITY_STABLE;
+$plugin->release   = '1.0.0';
 $plugin->dependencies = [
     'mod_customcert' => 2025041400,
 ];
