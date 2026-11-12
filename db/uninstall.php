@@ -48,7 +48,7 @@ function local_certledger_remove_block_role(): void {
 }
 
 /**
- * Writes every register record to moodledata/local_certledger/registro-<date>.csv.
+ * Writes every register record to moodledata/local_certledger/register-<date>.csv.
  *
  * @return string|null the file written, null if the register is empty
  */
@@ -60,7 +60,7 @@ function local_certledger_export_register(): ?string {
     }
     $dir = $CFG->dataroot . '/local_certledger';
     check_dir_exists($dir);
-    $file = $dir . '/registro-' . date('Ymd-His') . '.csv';
+    $file = $dir . '/register-' . date('Ymd-His') . '.csv';
     $handle = fopen($file, 'w');
     $records = $DB->get_recordset('local_certledger', null, 'scope, seq');
     $header = false;

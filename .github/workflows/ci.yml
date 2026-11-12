@@ -5,6 +5,10 @@ on: [push, pull_request]
 permissions:
   contents: read
 
+env:
+  # The Italian translation is kept for AMOS, it is not part of the plugin.
+  IGNORE_PATHS: translations
+
 jobs:
   test:
     runs-on: ubuntu-24.04

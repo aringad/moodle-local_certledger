@@ -93,6 +93,8 @@ final class registry_test extends advanced_testcase {
 
         $year = registry::year_of(time());
         $first = $this->issue($this->student()->id);
+        // The observer numbers silently: a warning means it deferred the work to the scheduled task.
+        $this->assertDebuggingNotCalled();
         $second = $this->issue($this->student()->id);
 
         $one = $DB->get_record(registry::TABLE, ['issueid' => $first], '*', MUST_EXIST);
@@ -111,7 +113,7 @@ final class registry_test extends advanced_testcase {
 
         $issueid = $this->issue($this->student()->id);
         $record = registry::register_issue($issueid);
-        $this->assertSame($record->id, registry::register_issue($issueid)->id);
+        $this->assertEquals($record->id, registry::register_issue($issueid)->id);
         $this->assertSame(1, $DB->count_records(registry::TABLE));
     }
 

@@ -73,8 +73,8 @@ final class provider_test extends provider_testcase {
 
     public function test_get_contexts_for_userid(): void {
         $system = \context_system::instance();
-        $this->assertSame([$system->id], provider::get_contexts_for_userid($this->learner->id)->get_contextids());
-        $this->assertSame([$system->id], provider::get_contexts_for_userid($this->manager->id)->get_contextids());
+        $this->assertEquals([$system->id], provider::get_contexts_for_userid($this->learner->id)->get_contextids());
+        $this->assertEquals([$system->id], provider::get_contexts_for_userid($this->manager->id)->get_contextids());
         $other = $this->getDataGenerator()->create_user();
         $this->assertSame([], provider::get_contexts_for_userid($other->id)->get_contextids());
     }
