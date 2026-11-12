@@ -43,7 +43,6 @@ class provider implements
     \core_privacy\local\metadata\provider,
     \core_privacy\local\request\core_userlist_provider,
     \core_privacy\local\request\plugin\provider {
-
     /**
      * Describes the stored personal data.
      *
@@ -71,7 +70,10 @@ class provider implements
             'statusreason' => 'privacy:metadata:statusreason',
             'statusby' => 'privacy:metadata:statusby',
             'timestatus' => 'privacy:metadata:timestatus',
+            'timeblocked' => 'privacy:metadata:timeblocked',
         ], 'privacy:metadata:table');
+        // The re-issue block is a role assignment in the certificate activity.
+        $collection->add_subsystem_link('core_role', [], 'privacy:metadata:core_role');
 
         return $collection;
     }
@@ -123,6 +125,7 @@ class provider implements
                 $certificates[] = (object)[
                     'number' => $record->certnumber,
                     'code' => $record->certcode,
+                    'originalcode' => $record->origcode,
                     'firstname' => $record->firstname,
                     'lastname' => $record->lastname,
                     'email' => $record->email,
@@ -133,6 +136,7 @@ class provider implements
                     'status' => registry::status_label((int)$record->status),
                     'statusreason' => $record->statusreason,
                     'timestatus' => $record->timestatus ? transform::datetime($record->timestatus) : null,
+                    'timeblocked' => $record->timeblocked ? transform::datetime($record->timeblocked) : null,
                 ];
             }
             $actions = [];

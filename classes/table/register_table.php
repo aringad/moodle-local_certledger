@@ -58,7 +58,8 @@ class register_table extends \table_sql {
      */
     public function setup_register(array $filters, bool $canannul): void {
         $this->canannul = $canannul;
-        $this->hasfilters = !empty($filters['year']) || !empty($filters['courseid']) || trim((string)($filters['search'] ?? '')) !== ''
+        $this->hasfilters = !empty($filters['year']) || !empty($filters['courseid'])
+            || trim((string)($filters['search'] ?? '')) !== ''
             || (isset($filters['status']) && (int)$filters['status'] >= 0);
         if (method_exists($this, 'set_caption')) {
             $this->set_caption(get_string('register', 'local_certledger'), ['class' => 'visually-hidden']);
@@ -310,15 +311,18 @@ class register_table extends \table_sql {
     public function col_actions($row) {
         if ((int)$row->status === registry::STATUS_ANNULLED && $this->canannul && registry::is_blocked($row)) {
             $url = new moodle_url('/local/certledger/annul.php', ['id' => $row->id]);
-            return html_writer::link($url, get_string('unblock', 'local_certledger'),
-                ['class' => 'btn btn-sm btn-outline-secondary']);
+            return html_writer::link(
+                $url,
+                get_string('unblock', 'local_certledger'),
+                ['class' => 'btn btn-sm btn-outline-secondary']
+            );
         }
         if ((int)$row->status !== registry::STATUS_VALID) {
             return '';
         }
         $links = [];
         if (!empty($row->cmid) && !empty($row->userid) && $this->can_download((int)$row->cmid)) {
-            // mod_customcert checks again that the viewer may see the report and that the certificate exists.
+            // The mod_customcert page checks again that the viewer may see the report and that the certificate exists.
             $url = new moodle_url('/mod/customcert/view.php', ['id' => $row->cmid, 'downloadissue' => $row->userid]);
             $links[] = html_writer::link($url, get_string('downloadpdf', 'local_certledger'), [
                 'class' => 'btn btn-sm btn-outline-secondary',
@@ -329,8 +333,11 @@ class register_table extends \table_sql {
         }
         if ($this->canannul) {
             $url = new moodle_url('/local/certledger/annul.php', ['id' => $row->id]);
-            $links[] = html_writer::link($url, get_string('annul', 'local_certledger'),
-                ['class' => 'btn btn-sm btn-outline-danger']);
+            $links[] = html_writer::link(
+                $url,
+                get_string('annul', 'local_certledger'),
+                ['class' => 'btn btn-sm btn-outline-danger']
+            );
         }
         return html_writer::div(implode(' ', $links), 'd-flex gap-1 flex-wrap');
     }
@@ -340,8 +347,11 @@ class register_table extends \table_sql {
      */
     public function print_nothing_to_display() {
         global $OUTPUT;
-        echo $OUTPUT->notification(get_string($this->hasfilters ? 'nocertificates' : 'registerempty', 'local_certledger'),
-            'info', false);
+        echo $OUTPUT->notification(
+            get_string($this->hasfilters ? 'nocertificates' : 'registerempty', 'local_certledger'),
+            'info',
+            false
+        );
     }
 
     /**

@@ -32,8 +32,12 @@ $id = required_param('id', PARAM_INT);
 $unblock = optional_param('unblock', 0, PARAM_BOOL);
 
 // Checks login and the view capability, then the annul capability.
-admin_externalpage_setup('local_certledger_register', '', ['id' => $id],
-    new moodle_url('/local/certledger/annul.php'));
+admin_externalpage_setup(
+    'local_certledger_register',
+    '',
+    ['id' => $id],
+    new moodle_url('/local/certledger/annul.php')
+);
 $context = context_system::instance();
 require_capability('local/certledger:annul', $context);
 
@@ -45,8 +49,12 @@ if ($unblock) {
     require_sesskey();
     if ((int)$record->status === registry::STATUS_ANNULLED && registry::is_blocked($record)) {
         registry::unblock($record);
-        redirect($returnurl, get_string('unblocked', 'local_certledger', $number), null,
-            \core\output\notification::NOTIFY_SUCCESS);
+        redirect(
+            $returnurl,
+            get_string('unblocked', 'local_certledger', $number),
+            null,
+            \core\output\notification::NOTIFY_SUCCESS
+        );
     }
     redirect($returnurl);
 }
@@ -57,8 +65,11 @@ if ((int)$record->status === registry::STATUS_ANNULLED && registry::is_blocked($
     echo $OUTPUT->header();
     echo $OUTPUT->heading(get_string('annulcertificate', 'local_certledger', $number));
     echo $OUTPUT->notification(get_string('blockedinfo', 'local_certledger'), 'info', false);
-    echo $OUTPUT->single_button(new moodle_url('/local/certledger/annul.php', ['id' => $id, 'unblock' => 1]),
-        get_string('unblock', 'local_certledger'), 'post');
+    echo $OUTPUT->single_button(
+        new moodle_url('/local/certledger/annul.php', ['id' => $id, 'unblock' => 1]),
+        get_string('unblock', 'local_certledger'),
+        'post'
+    );
     echo html_writer::div(html_writer::link($returnurl, get_string('backtoregister', 'local_certledger')), 'mt-3');
     echo $OUTPUT->footer();
     exit;
@@ -79,8 +90,12 @@ if ($form->is_cancelled()) {
 }
 if ($data = $form->get_data()) {
     registry::annul((int)$record->id, trim($data->reason), (int)$USER->id, $canblock && !empty($data->block));
-    redirect($returnurl, get_string('annulled', 'local_certledger', $number), null,
-        \core\output\notification::NOTIFY_SUCCESS);
+    redirect(
+        $returnurl,
+        get_string('annulled', 'local_certledger', $number),
+        null,
+        \core\output\notification::NOTIFY_SUCCESS
+    );
 }
 
 $PAGE->navbar->add(get_string('annulcertificate', 'local_certledger', $number));
@@ -96,8 +111,10 @@ $details = [
     get_string('cohorts', 'local_certledger') => s($record->cohorts),
     get_string('course') => format_string($record->coursename, true, ['context' => $context]),
     get_string('certname', 'local_certledger') => format_string($record->certname, true, ['context' => $context]),
-    get_string('timeissued', 'local_certledger') => userdate($record->timeissued,
-        get_string('strftimedatetimeshort', 'langconfig')),
+    get_string('timeissued', 'local_certledger') => userdate(
+        $record->timeissued,
+        get_string('strftimedatetimeshort', 'langconfig')
+    ),
 ];
 $list = '';
 foreach ($details as $label => $value) {
@@ -106,7 +123,7 @@ foreach ($details as $label => $value) {
 echo html_writer::tag('dl', $list, ['class' => 'row']);
 echo $OUTPUT->notification(get_string('annulwarning', 'local_certledger'), 'warning', false);
 
-// mod_customcert issues again within a minute when automatic issuing or student emails are on
+// Custom certificate issues again within a minute when automatic issuing or student emails are on
 // (issueautomatically exists from customcert 5.0.8 on).
 $customcert = $DB->get_record('customcert', ['id' => $record->customcertid]);
 if ($customcert && (!empty($customcert->emailstudents) || !empty($customcert->issueautomatically))) {

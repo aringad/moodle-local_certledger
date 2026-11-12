@@ -42,22 +42,34 @@ class annul_form extends \moodleform {
         $mform->addElement('hidden', 'id');
         $mform->setType('id', PARAM_INT);
 
-        $mform->addElement('textarea', 'reason', get_string('annulreason', 'local_certledger'),
-            ['rows' => 4, 'cols' => 60, 'maxlength' => 1000]);
+        $mform->addElement(
+            'textarea',
+            'reason',
+            get_string('annulreason', 'local_certledger'),
+            ['rows' => 4, 'cols' => 60, 'maxlength' => 1000]
+        );
         $mform->setType('reason', PARAM_TEXT);
         $mform->addRule('reason', null, 'required', null, 'client');
         $mform->addRule('reason', get_string('maximumchars', '', 1000), 'maxlength', 1000, 'client');
 
         if (!empty($this->_customdata['canblock'])) {
-            $mform->addElement('advcheckbox', 'block', get_string('blockreissue', 'local_certledger'),
-                get_string('blockreissue_desc', 'local_certledger'));
+            $mform->addElement(
+                'advcheckbox',
+                'block',
+                get_string('blockreissue', 'local_certledger'),
+                get_string('blockreissue_desc', 'local_certledger')
+            );
             $mform->setDefault('block', 1);
         }
 
         // Explicit labels: in Italian the standard "cancel" string reads "Annulla", which would be ambiguous here.
         $buttons = [
-            $mform->createElement('submit', 'annulbutton', get_string('confirmannul', 'local_certledger'),
-                ['class' => 'btn btn-danger']),
+            $mform->createElement(
+                'submit',
+                'annulbutton',
+                get_string('confirmannul', 'local_certledger'),
+                ['class' => 'btn btn-danger']
+            ),
             $mform->createElement('cancel', 'cancel', get_string('backtoregister', 'local_certledger')),
         ];
         $mform->addGroup($buttons, 'buttonar', '', [' '], false);

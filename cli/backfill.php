@@ -43,6 +43,10 @@ if ($options['help']) {
 Without --run nothing is changed: the script only lists what would be numbered.
 By default only the certificates issued since numbering was enabled are considered.
 
+Numbering changes the code of certificates that were already issued: a PDF or QR code
+downloaded before still carries the old code, which no longer verifies. Learners must
+download their certificate again. The old code is kept in the register.
+
 Options:
   --since=YYYY-MM-DD  Consider the certificates issued from this date
   --all               Consider every certificate, including those issued before the plugin was installed
@@ -81,6 +85,10 @@ foreach ($issues as $issue) {
 
 if (!$options['run']) {
     cli_writeln('Nothing changed. Add --run to number them.');
+    if ($issues) {
+        cli_writeln('Warning: the certificates that get a new number change code. PDFs and QR codes downloaded'
+            . ' before will no longer verify: their learners must download them again.');
+    }
     exit(0);
 }
 

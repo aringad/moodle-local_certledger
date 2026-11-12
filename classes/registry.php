@@ -222,9 +222,10 @@ class registry {
         global $DB;
 
         $last = (int)$DB->get_field_sql('SELECT MAX(seq) FROM {' . self::TABLE . '} WHERE scope = :scope', ['scope' => $scope]);
-        // Prefix LIKE on the indexed code column, only for issues the register does not know: normally none.
+        // Case-sensitive prefix LIKE, so it can use the index on the code column (our codes are uppercase),
+        // only for issues the register does not know: normally none.
         $codes = $DB->get_fieldset_sql(
-            'SELECT i.code FROM {customcert_issues} i WHERE ' . $DB->sql_like('i.code', ':prefix', false, false)
+            'SELECT i.code FROM {customcert_issues} i WHERE ' . $DB->sql_like('i.code', ':prefix', true, false)
             . ' AND NOT EXISTS (SELECT 1 FROM {' . self::TABLE . '} r WHERE r.issueid = i.id)',
             ['prefix' => $DB->sql_like_escape($scope . '-') . '%']
         );
@@ -423,32 +424,51 @@ class registry {
     public static function annul(int $id, string $reason, int $byuserid, bool $block = false): stdClass {
         global $DB;
 
-        $now = time();
-        $transaction = $DB->start_delegated_transaction();
-        // Read inside the transaction: two simultaneous annulments must not both go through.
-        $record = $DB->get_record(self::TABLE, ['id' => $id], '*', MUST_EXIST);
-        if ((int)$record->status !== self::STATUS_VALID) {
-            $transaction->allow_commit();
-            throw new moodle_exception('notvalid', 'local_certledger');
+        // A plain read takes no row lock: without this, two managers confirming at the same moment would both
+        // find the certificate valid and both annul it.
+        $lock = self::lock_factory()->get_lock('annul_' . $id, self::LOCK_TIMEOUT);
+        if (!$lock) {
+            throw new moodle_exception('locktimeout', 'local_certledger');
         }
-        // Every issue with this code: the original and any copy made by a course restore.
-        $issues = $DB->get_records('customcert_issues', ['code' => $record->certcode]);
-        $record->status = self::STATUS_ANNULLED;
-        $record->statusreason = $reason;
-        $record->statusby = $byuserid;
-        $record->timestatus = $now;
-        $record->timemodified = $now;
-        $DB->update_record(self::TABLE, $record);
-        foreach ($issues as $issue) {
-            $DB->delete_records('customcert_issues', ['id' => $issue->id]);
+        try {
+            $now = time();
+            $transaction = $DB->start_delegated_transaction();
+            try {
+                $record = $DB->get_record(self::TABLE, ['id' => $id], '*', MUST_EXIST);
+                if ((int)$record->status !== self::STATUS_VALID) {
+                    throw new moodle_exception('notvalid', 'local_certledger');
+                }
+                // Every issue of this certificate: the original, even if its code drifted, and any copy made by a
+                // course restore.
+                $issues = $DB->get_records_select(
+                    'customcert_issues',
+                    'code = :code OR id = :issueid',
+                    ['code' => $record->certcode, 'issueid' => $record->issueid]
+                );
+                $record->status = self::STATUS_ANNULLED;
+                $record->statusreason = $reason;
+                $record->statusby = $byuserid;
+                $record->timestatus = $now;
+                $record->timemodified = $now;
+                $DB->update_record(self::TABLE, $record);
+                // Block before deleting, in the same transaction: mod_customcert must not find the learner without
+                // a certificate and without the block, and a failure must leave the certificate valid.
+                if ($block) {
+                    self::block($record);
+                }
+                foreach ($issues as $issue) {
+                    $DB->delete_records('customcert_issues', ['id' => $issue->id]);
+                }
+                $transaction->allow_commit();
+            } catch (\Throwable $e) {
+                $transaction->rollback($e);
+            }
+        } finally {
+            $lock->release();
         }
-        $transaction->allow_commit();
 
         foreach ($issues as $issue) {
             self::trigger_issue_deleted($issue);
-        }
-        if ($block) {
-            self::block($record);
         }
         event\certificate_annulled::create([
             'context' => \context_system::instance(),
@@ -495,8 +515,11 @@ class registry {
         if (!$create) {
             return null;
         }
-        $roleid = create_role(get_string('blockrolename', 'local_certledger'), self::BLOCK_ROLE,
-            get_string('blockroledesc', 'local_certledger'));
+        $roleid = create_role(
+            get_string('blockrolename', 'local_certledger'),
+            self::BLOCK_ROLE,
+            get_string('blockroledesc', 'local_certledger')
+        );
         set_role_contextlevels($roleid, [CONTEXT_MODULE]);
         assign_capability('mod/customcert:receiveissue', CAP_PROHIBIT, $roleid, \context_system::instance()->id, true);
         return (int)$roleid;
@@ -506,7 +529,7 @@ class registry {
      * Stops mod_customcert from issuing the certificate of a register record again to its learner.
      *
      * @param stdClass $record register record
-     * @return bool false if the activity no longer exists or the learner is anonymised
+     * @return bool false if the activity no longer exists or the learner is anonymised or deleted
      */
     public static function block(stdClass $record): bool {
         global $DB;
@@ -516,6 +539,10 @@ class registry {
         }
         $context = \context_module::instance($record->cmid, IGNORE_MISSING);
         if (!$context) {
+            return false;
+        }
+        // A deleted user cannot be given a role (role_assign() throws), and cannot receive a certificate anyway.
+        if (!$DB->record_exists('user', ['id' => $record->userid, 'deleted' => 0])) {
             return false;
         }
         role_assign(self::get_block_roleid(true), $record->userid, $context->id, 'local_certledger', $record->id);
@@ -592,18 +619,24 @@ class registry {
                    AND NOT EXISTS (SELECT 1 FROM {" . self::TABLE . "} c WHERE c.certcode = i.code)
                    AND i.timecreated >= :since";
         $params = ['since' => $since];
-        if ($ownonly) {
-            $sql .= ' AND ' . $DB->sql_like('i.code', ':hyphen', false, false);
-            $params['hyphen'] = '%-%';
+        if (!$ownonly) {
+            return $DB->get_records_sql($sql . ' ORDER BY i.timecreated, i.id', $params, 0, $limit);
         }
-        $sql .= ' ORDER BY i.timecreated, i.id';
-        $issues = $DB->get_records_sql($sql, $params, 0, $ownonly ? 0 : $limit);
-        if ($ownonly) {
-            $issues = array_filter($issues, fn($issue) => self::parse_code($issue->code) !== null);
-            if ($limit > 0) {
-                $issues = array_slice($issues, 0, $limit, true);
+        // Only PHP can tell our codes apart, and with the "digits with hyphens" codes of mod_customcert every older
+        // certificate matches the hyphen: read them one at a time and stop at the limit.
+        $sql .= ' AND ' . $DB->sql_like('i.code', ':hyphen', true, false) . ' ORDER BY i.timecreated, i.id';
+        $params['hyphen'] = '%-%';
+        $issues = [];
+        $rs = $DB->get_recordset_sql($sql, $params);
+        foreach ($rs as $issue) {
+            if (self::parse_code($issue->code) !== null) {
+                $issues[$issue->id] = $issue;
+                if ($limit > 0 && count($issues) >= $limit) {
+                    break;
+                }
             }
         }
+        $rs->close();
         return $issues;
     }
 
@@ -665,11 +698,13 @@ class registry {
         $result = (object)['relinked' => 0, 'annulledcopies' => 0, 'reblocked' => 0, 'adopted' => 0, 'registered' => 0,
             'skipped' => 0, 'failed' => 0, 'removed' => 0, 'restored' => 0, 'codesfixed' => 0, 'errors' => []];
         $since = $since ?? self::get_settings()->enabledsince;
-        $fail = function (string $what, \Throwable $e) use ($result) {
+        // The messages are kept and shown on the register page, in the site language.
+        $fail = function (string $stringid, $a, \Throwable $e) use ($result) {
             $result->failed++;
             if (count($result->errors) < self::MAX_ERRORS) {
                 // No debuginfo: for DB errors it carries the SQL parameters, i.e. personal data.
-                $result->errors[] = $what . ': ' . get_class($e) . ': ' . $e->getMessage();
+                $result->errors[] = get_string($stringid, 'local_certledger', $a) . ': ' . get_class($e) . ': '
+                    . $e->getMessage();
             }
         };
 
@@ -684,8 +719,10 @@ class registry {
                                   AND NOT EXISTS (SELECT 1 FROM {" . self::TABLE . "} r2 WHERE r2.issueid = i2.id))";
         foreach ($DB->get_records_sql($sql, ['valid' => self::STATUS_VALID, 'removed' => self::STATUS_REMOVED]) as $record) {
             try {
-                $live = array_filter($DB->get_records('customcert_issues', ['code' => $record->certcode]),
-                    fn($issue) => !$DB->record_exists(self::TABLE, ['issueid' => $issue->id]));
+                $live = array_filter(
+                    $DB->get_records('customcert_issues', ['code' => $record->certcode]),
+                    fn($issue) => !$DB->record_exists(self::TABLE, ['issueid' => $issue->id])
+                );
                 if (count($live) !== 1) {
                     continue;
                 }
@@ -707,7 +744,7 @@ class registry {
                 ]);
                 $result->relinked++;
             } catch (\Throwable $e) {
-                $fail('relink ' . $record->certnumber, $e);
+                $fail('errorrelink', $record->certnumber, $e);
             }
         }
 
@@ -722,36 +759,44 @@ class registry {
                 self::trigger_issue_deleted($issue);
                 $result->annulledcopies++;
             } catch (\Throwable $e) {
-                $fail('annulled copy issue ' . $issue->id, $e);
+                $fail('errorannulledcopy', $issue->id, $e);
             }
         }
 
-        // 2b. Blocks whose role assignment Moodle dropped (e.g. on unenrolment): set it again.
+        // 2b. Blocks whose role assignment Moodle dropped (e.g. on unenrolment): set it again. Not for deleted users:
+        // deleting a user drops all their role assignments, and a deleted user cannot be given a role.
         $sql = "SELECT r.*
                   FROM {" . self::TABLE . "} r
-                 WHERE r.status = :annulled AND r.timeblocked IS NOT NULL AND r.cmid IS NOT NULL AND r.userid > 0
-                   AND NOT EXISTS (SELECT 1 FROM {role_assignments} ra WHERE ra.component = :component AND ra.itemid = r.id)";
-        foreach ($DB->get_records_sql($sql, ['annulled' => self::STATUS_ANNULLED, 'component' => 'local_certledger']) as $record) {
+                  JOIN {user} u ON u.id = r.userid AND u.deleted = 0
+                 WHERE r.status = :annulled AND r.timeblocked IS NOT NULL AND r.cmid IS NOT NULL
+                   AND NOT EXISTS (SELECT 1
+                                     FROM {role_assignments} ra
+                                    WHERE ra.component = :component AND ra.itemid = r.id)";
+        $params = ['annulled' => self::STATUS_ANNULLED, 'component' => 'local_certledger'];
+        foreach ($DB->get_records_sql($sql, $params) as $record) {
             try {
                 if (self::block($record)) {
                     $result->reblocked++;
                 }
             } catch (\Throwable $e) {
-                $fail('block ' . $record->certnumber, $e);
+                $fail('errorblock', $record->certnumber, $e);
             }
         }
 
         // 3. Issues that already carry one of our numbers, whatever their date.
-        foreach (self::get_unregistered_issues(0, 0, true) as $issue) {
+        foreach (self::get_unregistered_issues(0, $limit, true) as $issue) {
             try {
                 if (self::register_issue((int)$issue->id)) {
                     $result->adopted++;
                 } else if (count($result->errors) < self::MAX_ERRORS) {
-                    $result->errors[] = 'issue ' . $issue->id . ': its number ' . $issue->code
-                        . ' is already in the register with another code, or its activity no longer exists';
+                    $result->errors[] = get_string(
+                        'errornotadopted',
+                        'local_certledger',
+                        (object)['issueid' => $issue->id, 'code' => $issue->code]
+                    );
                 }
             } catch (\Throwable $e) {
-                $fail('adopt issue ' . $issue->id, $e);
+                $fail('erroradopt', $issue->id, $e);
             }
         }
 
@@ -762,7 +807,7 @@ class registry {
                     $result->registered++;
                 }
             } catch (\Throwable $e) {
-                $fail('number issue ' . $issue->id, $e);
+                $fail('errornumber', $issue->id, $e);
             }
         }
         $result->skipped = self::count_copies();
@@ -818,9 +863,10 @@ class registry {
      */
     public static function format_result(stdClass $result): string {
         return 'relinked: ' . $result->relinked . ', annulled copies deleted: ' . $result->annulledcopies
-            . ', blocks restored: ' . $result->reblocked . ', adopted: ' . $result->adopted . ', numbered: ' . $result->registered . ', copies left: ' . $result->skipped
-            . ', failed: ' . $result->failed . ', marked as removed: ' . $result->removed . ', restored: ' . $result->restored
-            . ', codes fixed: ' . $result->codesfixed;
+            . ', blocks restored: ' . $result->reblocked . ', adopted: ' . $result->adopted
+            . ', numbered: ' . $result->registered . ', copies left: ' . $result->skipped
+            . ', failed: ' . $result->failed . ', marked as removed: ' . $result->removed
+            . ', restored: ' . $result->restored . ', codes fixed: ' . $result->codesfixed;
     }
 
     /**

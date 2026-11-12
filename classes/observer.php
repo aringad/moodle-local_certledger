@@ -67,12 +67,12 @@ class observer {
     }
 
     /**
-     * Reports a problem where someone can see it: the PHP error log always, the page when debugging is on.
+     * Reports a problem to developers. The scheduled reconciliation does the work that was skipped and reports
+     * its own failures on the register page.
      *
      * @param string $message
      */
     private static function warn(string $message): void {
-        error_log('local_certledger: ' . $message); // phpcs:ignore moodle.PHP.ForbiddenFunctions.Found
         debugging('local_certledger: ' . $message, DEBUG_NORMAL);
     }
 }

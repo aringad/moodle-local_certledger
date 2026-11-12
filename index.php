@@ -53,8 +53,11 @@ $baseurl = new moodle_url('/local/certledger/index.php', $urlparams);
 $canannul = has_capability('local/certledger:annul', $context);
 
 $table = new register_table('local-certledger-register');
-$table->is_downloading($download, 'certificate_ledger_' . userdate(time(), '%Y%m%d', 99, false),
-    get_string('register', 'local_certledger'));
+$table->is_downloading(
+    $download,
+    'certificate_ledger_' . userdate(time(), '%Y%m%d', 99, false),
+    get_string('register', 'local_certledger')
+);
 $table->define_baseurl($baseurl);
 $table->setup_register($filters, $canannul);
 
@@ -96,7 +99,8 @@ if ($lasterrors) {
     echo $OUTPUT->notification(
         get_string('warninglasterrors', 'local_certledger', $lastrun ? userdate($lastrun) : '-')
         . html_writer::alist(array_map('s', $lasterrors), ['class' => 'small mb-0 mt-2']),
-        'warning', false
+        'warning',
+        false
     );
 }
 if ($waiting = registry::count_unregistered($settings->enabledsince)) {
@@ -119,14 +123,33 @@ echo html_writer::start_tag('form', [
     'class' => 'd-flex flex-wrap gap-3 align-items-end mb-4',
     'role' => 'search',
 ]);
-echo $field(get_string('filteryear', 'local_certledger'), 'lra-year',
-    html_writer::select([0 => get_string('all', 'local_certledger')] + registry::get_years(), 'year',
-        $filters['year'], false, ['id' => 'lra-year', 'class' => 'form-select']));
-echo $field(get_string('course'), 'lra-course',
-    html_writer::select([0 => get_string('all', 'local_certledger')] + registry::get_courses(), 'courseid',
-        $filters['courseid'], false, ['id' => 'lra-course', 'class' => 'form-select']));
-echo $field(get_string('status', 'local_certledger'), 'lra-status',
-    html_writer::select($statusoptions, 'status', $filters['status'], false, ['id' => 'lra-status', 'class' => 'form-select']));
+echo $field(
+    get_string('filteryear', 'local_certledger'),
+    'lra-year',
+    html_writer::select(
+        [0 => get_string('all', 'local_certledger')] + registry::get_years(),
+        'year',
+        $filters['year'],
+        false,
+        ['id' => 'lra-year', 'class' => 'form-select']
+    )
+);
+echo $field(
+    get_string('course'),
+    'lra-course',
+    html_writer::select(
+        [0 => get_string('all', 'local_certledger')] + registry::get_courses(),
+        'courseid',
+        $filters['courseid'],
+        false,
+        ['id' => 'lra-course', 'class' => 'form-select']
+    )
+);
+echo $field(
+    get_string('status', 'local_certledger'),
+    'lra-status',
+    html_writer::select($statusoptions, 'status', $filters['status'], false, ['id' => 'lra-status', 'class' => 'form-select'])
+);
 echo $field(get_string('search'), 'lra-search', html_writer::empty_tag('input', [
     'type' => 'search',
     'name' => 'search',
@@ -138,8 +161,11 @@ echo $field(get_string('search'), 'lra-search', html_writer::empty_tag('input', 
 echo html_writer::div(
     html_writer::empty_tag('input', ['type' => 'submit', 'class' => 'btn btn-primary',
         'value' => get_string('applyfilters', 'local_certledger')]) . ' ' .
-    html_writer::link(new moodle_url('/local/certledger/index.php'), get_string('resetfilters', 'local_certledger'),
-        ['class' => 'btn btn-outline-secondary'])
+    html_writer::link(
+        new moodle_url('/local/certledger/index.php'),
+        get_string('resetfilters', 'local_certledger'),
+        ['class' => 'btn btn-outline-secondary']
+    )
 );
 echo html_writer::end_tag('form');
 

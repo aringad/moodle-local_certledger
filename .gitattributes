@@ -1,0 +1,5 @@
+# Not part of the plugin package: translations go to AMOS (lang.moodle.org).
+/translations export-ignore
+/.github export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore
