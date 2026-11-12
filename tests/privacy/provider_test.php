@@ -49,6 +49,9 @@ final class provider_test extends provider_testcase {
 
         parent::setUp();
         $this->resetAfterTest();
+        // On PostgreSQL the test runs inside a transaction, which holds back the events for external observers
+        // such as ours until a commit that never comes: reset the slow way instead.
+        $this->preventResetByRollback();
         set_config('enabledsince', 0, 'local_certledger');
         $course = $this->getDataGenerator()->create_course();
         $this->learner = $this->getDataGenerator()->create_and_enrol($course, 'student');

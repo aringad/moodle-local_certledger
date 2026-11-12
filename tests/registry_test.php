@@ -43,6 +43,9 @@ final class registry_test extends advanced_testcase {
     protected function setUp(): void {
         parent::setUp();
         $this->resetAfterTest();
+        // On PostgreSQL the test runs inside a transaction, which holds back the events for external observers
+        // such as ours until a commit that never comes: reset the slow way instead.
+        $this->preventResetByRollback();
         set_config('prefix', 'TEST', 'local_certledger');
         set_config('yearlyreset', 1, 'local_certledger');
         set_config('enabledsince', 0, 'local_certledger');
